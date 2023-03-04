@@ -1,0 +1,83 @@
+version: '3'
+
+services:
+  db:
+    image: postgres:13
+
+    container_name: sprint3_postgres
+
+    restart: always
+
+    volumes:
+      - postrgresql_data:/var/lib/postgresql/data
+
+    env_file:
+      - ./env/.postgres.env
+
+  nginx:
+    image: nginx:latest
+
+    container_name: sprint3_nginx
+
+    restart: always
+
+    ports:
+      - "80:80"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/site.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../data:/data/html/:ro
+      - static_data:/data/static/
+      - media_data:/data/media/
+
+    env_file:
+      - ./env/.nginx.env
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.7.0
+
+    container_name: sprint3_elastic
+
+    restart: always
+
+    ports:
+      - "9200:9200"
+
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+    env_file:
+      - ./env/.elastic.env
+
+  backend:
+    build: ../movies_admin
+
+    container_name: sprint3_backend
+
+    restart: always
+
+    entrypoint: /app/docker-entrypoint.sh
+
+    volumes:
+      - static_data:/app/static/
+      - media_data:/app/media/
+
+    env_file:
+      - ./env/.django.env
+
+  etl:
+    build: ../postgres_to_es
+
+    container_name: sprint3_etl
+
+    restart: always
+
+    env_file:
+      - ./env/.etl.env
+
+volumes:
+  static_data:
+  media_data:
+  postrgresql_data:
+  elasticsearch_data:

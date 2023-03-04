@@ -1,0 +1,2 @@
+class ElasticLoadError(BaseException):
+    pass
