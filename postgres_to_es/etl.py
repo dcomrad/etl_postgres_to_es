@@ -4,8 +4,7 @@ from json import JSONDecodeError
 from time import sleep
 from typing import Iterable
 
-from constants import (ES_HOST, ES_INDEX, ES_PORT, ES_SCHEMA_FILE, PAGE_SIZE,
-                       PG_DSN, UPDATE_PERIOD)
+from constants import SETTINGS
 from exceptions import ElasticLoadError
 from extract import PostgresExtractor
 from load import ElasticsearchLoader
@@ -32,8 +31,9 @@ def get_es_schema(file_path: str) -> dict:
 
 @backoff(ElasticLoadError)
 def main():
-    extractor = PostgresExtractor(State(JsonFileStorage('state.txt')), PG_DSN,
-                                  PAGE_SIZE)
+    extractor = PostgresExtractor(State(JsonFileStorage('state.txt')),
+                                  SETTINGS.pg_dsn.dict(),
+                                  SETTINGS.etl.page_size)
 
     transformer = Transformer()
     transformer.add_handler('id', None, str)
@@ -45,14 +45,16 @@ def main():
     transformer.add_handler('writers', None, persons_handler)
     transformer.add_handler('directors', 'director', persons_names_handler)
 
-    loader = ElasticsearchLoader(ES_INDEX, get_es_schema(ES_SCHEMA_FILE),
-                                 ES_HOST, ES_PORT)
+    loader = ElasticsearchLoader(SETTINGS.elastic.host,
+                                 SETTINGS.elastic.port,
+                                 SETTINGS.elastic.index,
+                                 get_es_schema(SETTINGS.elastic.schema_file))
 
     while True:
         for filmwork in extractor.get_filmworks():
             data = transformer.transform(filmwork, 'id')
             loader.bulk_load(data)
-        sleep(UPDATE_PERIOD)
+        sleep(SETTINGS.etl.update_period)
 
 
 if __name__ == '__main__':

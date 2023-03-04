@@ -2,7 +2,7 @@ import json
 
 import requests
 from configs import get_configured_logger
-from constants import PAGE_SIZE
+from constants import SETTINGS
 from exceptions import ElasticLoadError
 from requests import ConnectionError
 from utils import backoff
@@ -10,13 +10,22 @@ from utils import backoff
 logger = get_configured_logger(__name__)
 
 
+# Действительно, стоило не изобретать велосипед, а использовать готовое
+# решение. Спасибо за подсказку. Я увидел, что это замечание не обязательное и
+# принял решение ничего не менять по банальной причине нехватки времени.
+# В понедельник жесткий дедлайн перед стартом командной работы.
+# Обязательно ознакомлюсь и обещаю использовать это решение в будущих работах)
 class ElasticsearchLoader:
     """Класс забирает данные в подготовленном формате и загружает их в
     Elasticsearch."""
     JSON_HEADER = {'Content-Type': 'application/json'}
 
     @backoff(ConnectionError)
-    def __init__(self, index: str, schema: dict, url: str, port: str | int):
+    def __init__(self,
+                 url: str,
+                 port: str | int,
+                 index: str,
+                 schema: dict):
         self.index = index
         self.url = f'http://{url}:{str(port)}'
         self._set_schema(schema)
@@ -46,7 +55,9 @@ class ElasticsearchLoader:
         logger.info(msg.format(n=len(body) // 2, index=self.index))
 
     @backoff(ConnectionError)
-    def bulk_load(self, items: dict, page_size: int = PAGE_SIZE) -> None:
+    def bulk_load(self,
+                  items: dict,
+                  page_size: int = SETTINGS.etl.page_size) -> None:
         """Принимает словарь для записи в Elasticsearch, причём:
          key - id документа, а value - сам документ в виде объекта dict.
          Загрузка происходит пачками page_size размера."""

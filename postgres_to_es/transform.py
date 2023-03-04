@@ -6,10 +6,10 @@ from pydantic import BaseModel
 
 class Transformer:
     """Класс принимает данные во внутреннем формате и преобразовывать
-    структуру и формат, пригодные для записи в Elasticsearch"""
+    структуру и формат, пригодные для записи в Elasticsearch."""
     @dataclass(frozen=True)
     class Handler:
-        field_name: Optional[str]
+        field_name: str | None
         func: Optional[Callable]
 
     def __init__(self):
@@ -17,17 +17,18 @@ class Transformer:
 
     def add_handler(self,
                     field_name: str,
-                    new_name: Optional[str] = None,
+                    new_name: str | None = None,
                     handler: Optional[Callable] = None) -> None:
         """Задаёт обработчик для последующей обработки полученных элементов.
         Args:
-            field_name (str): Имя поля исходного объекта
+            field_name (str): Имя поля исходного объекта.
 
-            new_name (str): Новое имя поля. Если None, исходное имя не меняется
+            new_name (str):
+                Новое имя поля. Если None, исходное имя не меняется.
 
             handler (callable):
                 Функция для преобразования значения. Если None, сохраняется
-                исходное значение
+                исходное значение.
         """
         if field_name not in self.handlers:
             self.handlers[field_name] = {self.Handler(new_name, handler)}
@@ -37,7 +38,7 @@ class Transformer:
     def transform(self, items: Iterable, key_field: str) -> dict[str: dict]:
         """Обрабатывает элементы items и возвращает словарь, где ключом
         является item[key_field], а значением сам item, преобразованный
-        обработчиками, предварительно заданными методом add_handler"""
+        обработчиками, предварительно заданными методом add_handler."""
         result = {}
         for item in items:
             element = {}

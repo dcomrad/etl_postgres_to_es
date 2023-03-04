@@ -3,6 +3,7 @@ from typing import Iterable
 from uuid import UUID
 
 import psycopg2
+import contextlib
 from configs import get_configured_logger
 from filmwork import Filmwork, Person
 from psycopg2 import OperationalError
@@ -28,24 +29,10 @@ class PostgresExtractor:
         self.pg_dsn = pg_dsn
         self.page_size = page_size
         self.tables = self.TABLES if tables == 'all' else tables
-        self.connection = None
 
     @backoff(OperationalError)
-    def _connect(self) -> None:
-        self.connection = psycopg2.connect(**self.pg_dsn,
-                                           cursor_factory=DictCursor)
-
     def _get_connection(self) -> pg_connection:
-        """Устанавливает или восстанавливает соединение с БД."""
-        if not self.connection:
-            self._connect()
-
-        try:
-            self.connection.cursor().execute('SELECT 1')
-        except OperationalError:
-            self._connect()
-
-        return self.connection
+        return psycopg2.connect(**self.pg_dsn, cursor_factory=DictCursor)
 
     @backoff(OperationalError)
     def _get_table_ids(self, table: str) -> Iterable[Iterable[UUID]]:
@@ -57,22 +44,23 @@ class PostgresExtractor:
             modified = datetime.min
             self.state.set_state(table, str(modified))
 
-        with self._get_connection().cursor() as cursor:
-            query = """
-                SELECT id, modified
-                FROM {table}
-                WHERE modified > '{modified}'
-                ORDER BY modified
-            """
-            cursor.execute(query.format(table=table, modified=modified))
+        with contextlib.closing(self._get_connection()) as connection:
+            with connection.cursor() as cursor:
+                query = """
+                    SELECT id, modified
+                    FROM {table}
+                    WHERE modified > '{modified}'
+                    ORDER BY modified
+                """
+                cursor.execute(query.format(table=table, modified=modified))
 
-            while True:
-                rows = cursor.fetchmany(size=self.page_size)
-                if not rows:
-                    self.state.set_state(table, str(modified))
-                    return
-                modified = rows[-1].get('modified')
-                yield (row.get('id') for row in rows)
+                while True:
+                    rows = cursor.fetchmany(size=self.page_size)
+                    if not rows:
+                        self.state.set_state(table, str(modified))
+                        return
+                    modified = rows[-1].get('modified')
+                    yield (row.get('id') for row in rows)
 
     @backoff(OperationalError)
     def _get_filmwork_ids(self, table: str) -> Iterable[Iterable[UUID]]:
@@ -84,26 +72,27 @@ class PostgresExtractor:
                 yield (item for item in list(filmwork_ids))
             return
 
-        with self._get_connection().cursor() as cursor:
-            query = """
-                SELECT fw.id
-                FROM film_work fw
-                LEFT JOIN {table}_film_work tfw ON tfw.film_work_id = fw.id
-                WHERE tfw.{table}_id IN ({table_ids})
-            """
-            for table_ids in self._get_table_ids(table):
-                cursor.execute(
-                    query.format(
-                        table=table,
-                        table_ids=','.join([f"'{_id}'" for _id in table_ids])
+        with contextlib.closing(self._get_connection()) as connection:
+            with connection.cursor() as cursor:
+                query = """
+                    SELECT fw.id
+                    FROM film_work fw
+                    LEFT JOIN {table}_film_work tfw ON tfw.film_work_id = fw.id
+                    WHERE tfw.{table}_id IN ({table_ids})
+                """
+                for table_ids in self._get_table_ids(table):
+                    cursor.execute(
+                        query.format(
+                            table=table,
+                            table_ids=','.join([f"'{id}'" for id in table_ids])
+                        )
                     )
-                )
-                while True:
-                    rows = cursor.fetchmany(size=self.page_size)
-                    if not rows:
-                        break
-                    yield (row.get('id') for row in rows)
-            return
+                    while True:
+                        rows = cursor.fetchmany(size=self.page_size)
+                        if not rows:
+                            break
+                        yield (row.get('id') for row in rows)
+                return
 
     @backoff(OperationalError)
     def get_filmworks(self) -> Iterable[Iterable[Filmwork]]:
@@ -134,9 +123,10 @@ class PostgresExtractor:
                 if not filmwork_ids:
                     continue
 
-                with self._get_connection().cursor() as cursor:
-                    cursor.execute(query.format(filmwork_ids=filmwork_ids))
-                    rows = cursor.fetchall()
+                with contextlib.closing(self._get_connection()) as connection:
+                    with connection.cursor() as cursor:
+                        cursor.execute(query.format(filmwork_ids=filmwork_ids))
+                        rows = cursor.fetchall()
 
                 filmworks = {}
                 for row in rows:
@@ -158,7 +148,3 @@ class PostgresExtractor:
                         getattr(filmworks[fw_id], f'{role}s').add(person)
 
                 yield filmworks.values()
-
-    def __del__(self):
-        if self.connection:
-            self.connection.close()

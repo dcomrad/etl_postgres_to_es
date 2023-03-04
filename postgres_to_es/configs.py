@@ -2,7 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from sys import stdout
 
-from constants import LOG_FILE, LOGGER_DT_FORMAT, LOGGER_FORMAT
+from constants import SETTINGS
 
 
 def get_configured_logger(logger_name: str) -> logging.Logger:
@@ -12,12 +12,13 @@ def get_configured_logger(logger_name: str) -> logging.Logger:
     logger.setLevel(logging.DEBUG)
 
     c_handler = logging.StreamHandler(stdout)
-    f_handler = RotatingFileHandler(LOG_FILE,
+    f_handler = RotatingFileHandler(filename=SETTINGS.logger.log_file,
                                     maxBytes=10**6,
                                     backupCount=5,
                                     encoding='UTF-8')
 
-    formatter = logging.Formatter(fmt=LOGGER_FORMAT, datefmt=LOGGER_DT_FORMAT)
+    formatter = logging.Formatter(fmt=SETTINGS.logger.format,
+                                  datefmt=SETTINGS.logger.dt_format)
     c_handler.setFormatter(formatter)
     f_handler.setFormatter(formatter)
 

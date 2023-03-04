@@ -65,6 +65,7 @@ services:
 
     env_file:
       - ./env/.django.env
+      - ./env/.postgres.env
 
   etl:
     build: ../postgres_to_es
@@ -75,6 +76,7 @@ services:
 
     env_file:
       - ./env/.etl.env
+      - ./env/.postgres.env
 
 volumes:
   static_data:
